@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: vm3-original-x402-quote-preflight
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: .
+    buildCommand: npm ci --ignore-scripts --no-audit --no-fund
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.23.2"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PAY_TO
+        value: "0xfCbE632f37F760218216b37df52f0d73f9020234"

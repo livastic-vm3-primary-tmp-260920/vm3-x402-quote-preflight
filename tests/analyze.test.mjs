@@ -1,0 +1,16 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {parsePublicQuote,evaluatePublicQuote,EXAMPLE_QUOTE,CHAIN,NATIVE_BASE_USDC} from "../analyze.mjs";
+const b64=x=>Buffer.from(JSON.stringify(x)).toString("base64");
+test("default no-input demo evaluates public quote not merchant",()=>{const j=evaluatePublicQuote(parsePublicQuote());assert.equal(j.reviewOutcome,"basic_public_structure_consistent");assert.equal(j.noSpendingAuthorized,true);});
+test("base64 and JSON both parse",()=>{const x=structuredClone(EXAMPLE_QUOTE);assert.deepEqual(parsePublicQuote(b64(x)),x);assert.deepEqual(parsePublicQuote(JSON.stringify(x)),x);});
+test("reject signed payload token or private details",()=>{for(const secret of ["x-payment","payment-signature","authorization","privatekey","cookie","seed_phrase","access_token"]){const j={...EXAMPLE_QUOTE,[secret]:"secret"};assert.throws(()=>parsePublicQuote(JSON.stringify(j)));}});
+test("invalid base64/json rejected",()=>{for(const a of ['!?', '{"accepts":', '"hello"', JSON.stringify({accepts:[]})])assert.throws(()=>parsePublicQuote(a));});
+test("reject all amounts not nonnegative atomic integer",()=>{for(const a of ['NaN','-4','0.5','1e9','']){const q=structuredClone(EXAMPLE_QUOTE);q.accepts[0].amount=a;const j=evaluatePublicQuote(q);assert.equal(j.reviewOutcome,"structural_inconsistency");}});
+test("explicit non-Base network produces safe mismatch",()=>{const q=structuredClone(EXAMPLE_QUOTE);q.accepts[0].network="eip155:1";assert.equal(evaluatePublicQuote(q).failedChecks,1);});
+test("wrong token cannot be priced as native USDC",()=>{const q=structuredClone(EXAMPLE_QUOTE);q.accepts[0].asset="0x"+("1".repeat(40));assert.equal(evaluatePublicQuote(q).observations.quotedAmountUSDCForNativeBaseOnly,null);});
+test("missing payto marked UNKNOWN, not falsely valid",()=>{const q=structuredClone(EXAMPLE_QUOTE);delete q.accepts[0].payTo;assert.equal(evaluatePublicQuote(q).reviewOutcome,"insufficient_public_evidence");});
+test("multiple accepts a concern, not blindly trust first",()=>{const q=structuredClone(EXAMPLE_QUOTE);q.accepts.push({...q.accepts[0]});assert.equal(evaluatePublicQuote(q).reviewOutcome,"structural_inconsistency");});
+test("synthetic known Base USDC amount from atomic exact",()=>{const q=structuredClone(EXAMPLE_QUOTE);q.accepts[0].amount="1000001";assert.equal(evaluatePublicQuote(q).observations.quotedAmountUSDCForNativeBaseOnly,"1.000001");});
+test("URL cannot contain credentials",()=>{const q=structuredClone(EXAMPLE_QUOTE);q.resource.url="https://user:pass@example.com/demo";assert.equal(evaluatePublicQuote(q).observations.resourceUrlPublicOnly,null);});
+test("no signed payment authorized or live seller certified",()=>{const q=evaluatePublicQuote(EXAMPLE_QUOTE);assert.match(q.disclosure,/No live endpoint/);assert.equal(q.chargedUSDC,"0.010000");assert.equal(CHAIN,"eip155:8453");assert.equal(NATIVE_BASE_USDC.length,42);});
